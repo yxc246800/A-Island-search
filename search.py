@@ -90,7 +90,10 @@ class Spider():
                 print(err)
 
             #解码
-            data     = str(data, encoding='utf-8')
+            try:
+                data     = str(data, encoding='utf-8')
+            except Exception as error:
+                print(error)
             return data
 
     #正则解析数据
