@@ -84,7 +84,7 @@ class Spider():
             request  = ur.Request(url=url, data=None, headers=self._header)
             data     = ''
             try:
-                html = ur.urlopen(request, timeout=12)
+                html = ur.urlopen(request, timeout=self._TIME_OUT)
                 data = html.read()
             except Exception as err:
                 print(err)
