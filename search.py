@@ -31,9 +31,10 @@ class Spider():
     _searchWay          = ''
     _searchBlock        = ''
     _keyword            = ''
+    _searchThreadID     = ''
     _INTERVAL           = 1
     _MAX_TRY_NUM        = 5
-    _BLOCK_PAGE_NUM     = 1
+    _PAGE_NUM     = 1
     _THREAD_PAGE_NUM    = 1
     _RESULT_NUM         = 0
     _TIME_OUT           = 50
@@ -43,15 +44,14 @@ class Spider():
     #初始化
     def __init__(self):
         print('initing... ... ...')
-        self.init(5, 50, 50)
+        self.init(5, 50)
 
-    def init(self, max_tryNum, timeOut, batchSize):
+    def init(self, max_tryNum, timeOut):
+
+        self._MAX_TRY_NUM = max_tryNum;
+        self._TIME_OUT = timeOut;
 
         self._keyword         = input("请输入搜索关键词：")
-        self._searchBlock     = input("请输入搜索板块："  )
-        while(self._searchBlock not in self._blockSets):
-            self._searchBlock = input("请重新输入查询板块名称，确认其没有输错：")
-            print(self._searchBlock)
 
         self._searchWay       = input("请输入搜索模式："
                                       "0  按po主内容+回复内容搜索"
@@ -64,45 +64,83 @@ class Spider():
                                       "2  按串内回复搜索")
             print(self._searchWay)
 
+        if(self._searchWay == '2'):
+            self._searchThreadID = input("请输入搜索串号：" )
+        if(self._searchWay == '1'):
+            self._searchBlock     = input("请输入搜索板块：")
+            while(self._searchBlock not in self._blockSets):
+                self._searchBlock = input("请重新输入查询板块名称，确认其没有输错：")
+                print(self._searchBlock)
+
+
+        self._BATCH_SIZE      = input("请输入每次搜索页数：")
+        while(not(self._BATCH_SIZE.isdigit()) or (int(self._BATCH_SIZE) <= 0)):
+            self._BATCH_SIZE  = input("请重新输入，并确保其是大于0的数字：")
+            print(self._BATCH_SIZE)
+        self._BATCH_SIZE = int(self._BATCH_SIZE)
+
 
         #板块名称预编码
         self._searchBlock = up.quote(self._searchBlock, encoding='utf-8')
 
-    #获得当前板块总页数
-    def getPageNum(self):
-        pattern_pageNum = re.compile(r'(?<="uk-pagination uk-pagination-left h-pagination">).*?下一页.*?page=(.*?)">(?=末页)', re.DOTALL)
-        data            = self.getData(1)
+    #获得当页面总页数
+    def getPageNum(self, pattern_pageNum=None):
+        url                 = ''
+        pattern_pageNum     = None
+        if self._searchWay == '1':
+            url             = self._base_url + 'f/' + str(self._searchBlock) + '?page=' + str(1)
+        if self._searchWay == '2':
+            url             = self._base_url + 't/' + self._searchThreadID + '?page=' + str(1)
+        if(not pattern_pageNum):
+            pattern_pageNum = re.compile(r'(?<="uk-pagination uk-pagination-left h-pagination">).*?下一页.*?page=(.*?)">(?=末页)', re.DOTALL)
 
+        data                = self.getData(url)
+        match = []
         if data  != '':
-            match = pattern_pageNum.findall(data)
+            try:
+                match = pattern_pageNum.findall(data)
+            except Exception as error:
+                print(error, 123)
             if match:
+                print(match[0])
                 return match[0]
+            else:
+                print(match[0], flush=True)
+                print('no match', flush=True)
+                pattern_pageNum = re.compile(r'(?<="uk-pagination uk-pagination-left h-pagination">).*<a href=".*?">(.*?)</a>.*?(?=下一页)', re.DOTALL)
+                self.getPageNum(pattern_pageNum)
+
 
     #获取当前页面数据
-    def getData(self, pageNum):
-            url      = self._base_url + 'f/' + str(self._searchBlock) + '?page=' + str(pageNum)
+    def getData(self, url):
             request  = ur.Request(url=url, data=None, headers=self._header)
             data     = ''
             try:
                 html = ur.urlopen(request, timeout=self._TIME_OUT)
                 data = html.read()
             except Exception as err:
-                print(err)
+                print(err, 456)
 
             #解码
             try:
                 data     = str(data, encoding='utf-8')
             except Exception as error:
-                print(error)
+                print(error, 345)
             return data
 
     #正则解析数据
     def dataHandle(self, data, key_word):
+
+        pattern_word        = ''
+        if self._searchWay == '1':
+            pattern_word    = "h-threads-item-main"
+        if self._searchWay == '2':
+            pattern_word    = "h-threads-item-reply-main"
         if data    != '':
             #第一个：日期
             #第二个：串号
             #第三个：串内容
-            pattern = re.compile(r'(?<="h-threads-item-main").*?"h-threads-info-createdat">(.*?)(?=</span>)'
+            pattern = re.compile(r'' + pattern_word + r'(?<=).*?"h-threads-info-createdat">(.*?)(?=</span>)'
                                  r'.*?"h-threads-info-id">+(.*?)(?=</a>)'
                                  r'.*?"h-threads-content">(.*?)(?=</div>)', flags=re.DOTALL)
 
@@ -118,12 +156,25 @@ class Spider():
 
     #搜索
     def search(self):
-        self._BLOCK_PAGE_NUM = int(self.getPageNum())
 
-        for i in range(self._BLOCK_PAGE_NUM+1)[1:]:
+        url = ''
+        try:
+            self._PAGE_NUM = int(self.getPageNum())
+        except Exception as err:
+            print(err, 234)
+
+        for i in range(self._PAGE_NUM+1)[1:]:
             print(i, flush=True)
-            data = self.getData(i)
+            if self._searchWay == '1':
+                url = self._base_url + 'f/' + str(self._searchBlock) + '?page=' + str(i)
+            if self._searchWay == '2':
+                url = self._base_url + 't/' + self._searchThreadID + '?page=' + str(i)
+            data = self.getData(url)
             self.dataHandle(data, self._keyword)
+            if(i % self._BATCH_SIZE == 0):
+                input("list " + str(self._BATCH_SIZE) +" pages items "
+                        "press anykey to continue... ... ...")
+
 
 def main():
 
